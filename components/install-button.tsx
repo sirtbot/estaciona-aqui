@@ -114,12 +114,15 @@ export function InstallButton() {
     <Button
       onClick={handleInstall}
       size="sm"
-      variant="outline"
-      className="h-9 bg-green-600 hover:bg-green-700 text-white border-green-700 hover:border-green-800"
+      variant="ghost"
+      className="h-9 w-9 md:w-auto p-0 md:px-3 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-600 dark:text-blue-400 relative group"
       title="Instalar aplicação"
     >
-      <Download className="h-4 w-4" />
-      <span className="ml-1.5 hidden md:inline font-semibold">Instalar</span>
+      <div className="absolute inset-0 bg-blue-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      <Download className="h-4 w-4 relative z-10" />
+      <span className="ml-1.5 hidden md:inline font-semibold relative z-10">
+        Instalar
+      </span>
     </Button>
   );
 }

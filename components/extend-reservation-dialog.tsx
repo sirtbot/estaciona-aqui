@@ -53,13 +53,16 @@ export function ExtendReservationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-md mx-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-md mx-auto bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
         <DialogHeader>
-          <DialogTitle className="text-xl flex items-center gap-2">
-            <div className="flex items-center justify-center w-10 h-10 bg-blue-500 text-white rounded-lg font-bold">
-              {spotNumber}
+          <DialogTitle className="text-xl flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-blue-500 rounded-xl blur-md opacity-30"></div>
+              <div className="relative flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl font-bold shadow-lg">
+                {spotNumber}
+              </div>
             </div>
-            <span>Prolongar Reserva</span>
+            <span className="font-bold">Prolongar Reserva</span>
           </DialogTitle>
           <DialogDescription className="text-sm">
             Adicione mais tempo à sua reserva atual
@@ -68,11 +71,11 @@ export function ExtendReservationDialog({
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             {/* Tempo atual */}
-            <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+            <div className="p-4 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-800 dark:to-slate-900 rounded-xl border-2 border-slate-200 dark:border-slate-700 shadow-sm">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-400 mb-2 uppercase tracking-wide">
                 Término Atual
               </div>
-              <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <div className="text-base font-bold text-slate-900 dark:text-slate-100">
                 {currentEndTime.toLocaleString("pt-PT", {
                   day: "2-digit",
                   month: "short",
@@ -84,10 +87,10 @@ export function ExtendReservationDialog({
 
             {/* Opções de prolongamento */}
             <div className="grid gap-3">
-              <div className="flex items-center gap-2">
-                <Plus className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                <Label className="text-base">Adicionar Tempo</Label>
-              </div>
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar Tempo
+              </Label>
 
               <div className="grid grid-cols-3 gap-2">
                 {extensionOptions.map((option) => (
@@ -96,11 +99,11 @@ export function ExtendReservationDialog({
                     type="button"
                     onClick={() => setSelectedHours(option.hours)}
                     className={`
-                      relative py-3 px-2 rounded-lg border-2 font-semibold text-sm transition-all
+                      relative py-3.5 px-2 rounded-xl border-2 font-bold text-sm transition-all
                       ${
                         selectedHours === option.hours
-                          ? "bg-blue-500 text-white border-blue-600 shadow-lg scale-105"
-                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500"
+                          ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white border-blue-600 shadow-lg scale-105"
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md"
                       }
                     `}
                   >
@@ -108,7 +111,7 @@ export function ExtendReservationDialog({
                     {option.popular && selectedHours !== option.hours && (
                       <Badge
                         variant="secondary"
-                        className="absolute -top-2 -right-2 text-[9px] px-1 py-0"
+                        className="absolute -top-2 -right-2 text-[9px] px-1.5 py-0 bg-amber-400 text-amber-900 border-0 font-semibold"
                       >
                         Popular
                       </Badge>
@@ -119,14 +122,14 @@ export function ExtendReservationDialog({
             </div>
 
             {/* Novo horário de término */}
-            <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border-2 border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <div className="text-xs font-medium text-green-700 dark:text-green-400">
+            <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-xl border-2 border-green-200 dark:border-green-800 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <div className="text-xs font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">
                   Novo Término
                 </div>
               </div>
-              <div className="text-base font-bold text-green-900 dark:text-green-100">
+              <div className="text-lg font-bold text-green-900 dark:text-green-100">
                 {newEndTime.toLocaleString("pt-PT", {
                   day: "2-digit",
                   month: "short",
@@ -135,22 +138,26 @@ export function ExtendReservationDialog({
                 })}
               </div>
               <div className="text-xs text-green-700 dark:text-green-400 mt-1">
-                +{selectedHours >= 1 ? `${selectedHours}h` : `${selectedHours * 60} min`} adicionais
+                +
+                {selectedHours >= 1
+                  ? `${selectedHours}h`
+                  : `${selectedHours * 60} min`}{" "}
+                adicionais
               </div>
             </div>
           </div>
-          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="w-full sm:w-auto h-12 text-base"
+              className="w-full sm:w-auto h-12 text-base font-semibold border-2"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
-              className="w-full sm:w-auto h-12 text-base font-semibold"
+              className="w-full sm:w-auto h-12 text-base font-bold bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg"
             >
               Confirmar Prolongamento
             </Button>
