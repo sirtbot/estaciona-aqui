@@ -118,7 +118,7 @@ export function ReservationDialog({
           </DialogTitle>
           <DialogDescription className="text-sm">
             {hasActiveReservation ? (
-              <div className="flex items-center gap-2 mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+              <span className="flex items-center gap-2 mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
                 <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
                 <span className="text-orange-700 dark:text-orange-300">
                   Vaga ocupada. Disponível a partir de{" "}
@@ -131,7 +131,7 @@ export function ReservationDialog({
                     })}
                   </strong>
                 </span>
-              </div>
+              </span>
             ) : (
               "Preencha seus dados para reservar (até 48h de antecedência)"
             )}

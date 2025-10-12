@@ -17,7 +17,7 @@ import {
   Clock,
   User,
   Car,
-  LogOut,
+  LogOut, X,
   ClockIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,8 @@ export default function Home() {
   const [selectedReservation, setSelectedReservation] =
     useState<Reservation | null>(null);
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedCancelReservationId, setSelectedCancelReservationId] = useState<string | null>(null);
 
   // Carregar reservas da API
   const loadReservations = useCallback(async (showRefreshIndicator = false) => {
@@ -463,14 +465,15 @@ export default function Home() {
                     {/* Botão Cancelar */}
                     <div className="mt-2">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleCancelReservation(reservation.id)}
-                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-950 text-xs h-8"
+                        onClick={() => { setSelectedCancelReservationId(reservation.id); setCancelDialogOpen(true); }}
+                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 text-xs h-9 border-red-300 font-semibold"
                       >
+                        <X className="h-3.5 w-3.5 mr-1.5" />
                         Cancelar Reserva
                       </Button>
-                    </div>
+                  </div>
                   </Card>
                 );
               })}
@@ -535,6 +538,42 @@ export default function Home() {
               className="w-full sm:w-auto h-11 bg-green-600 hover:bg-green-700"
             >
               Sim, já saí
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Reservation Dialog */}
+      <AlertDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md mx-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <X className="h-5 w-5 text-red-600" />
+              <X className="h-3.5 w-3.5 mr-1.5" />
+                        Cancelar Reserva
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar esta reserva? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto h-11">
+              Não, manter reserva
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (selectedCancelReservationId) {
+                  handleCancelReservation(selectedCancelReservationId);
+                }
+                setCancelDialogOpen(false);
+                setSelectedCancelReservationId(null);
+              }}
+              className="w-full sm:w-auto h-11 bg-red-600 hover:bg-red-700"
+            >
+              Sim, cancelar reserva
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

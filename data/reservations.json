@@ -6,5 +6,21 @@
     "licensePlate": "3123",
     "startTime": "2025-10-12T12:23:01.990Z",
     "endTime": "2025-10-12T12:53:01.990Z"
+  },
+  {
+    "id": "res-1760258972306",
+    "spotId": "spot-4",
+    "name": "3",
+    "licensePlate": "321",
+    "startTime": "2025-10-12T13:23:01.990Z",
+    "endTime": "2025-10-12T15:23:01.990Z"
+  },
+  {
+    "id": "res-1760258996744",
+    "spotId": "spot-5",
+    "name": "21",
+    "licensePlate": "312",
+    "startTime": "2025-10-12T08:49:56.338Z",
+    "endTime": "2025-10-12T10:49:56.338Z"
   }
 ]
