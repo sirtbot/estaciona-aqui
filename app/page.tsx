@@ -3,13 +3,34 @@
 import { useState, useEffect, useCallback } from "react";
 import { ParkingGrid } from "@/components/parking-grid";
 import { ReservationDialog } from "@/components/reservation-dialog";
+import { ExtendReservationDialog } from "@/components/extend-reservation-dialog";
+import { InstallButton } from "@/components/install-button";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { defaultParkingLot } from "@/lib/parking-data";
 import { Reservation } from "@/lib/types";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ParkingCircle, RefreshCw, Clock, User, Car } from "lucide-react";
+import {
+  ParkingCircle,
+  RefreshCw,
+  Clock,
+  User,
+  Car,
+  LogOut,
+  ClockIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function Home() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -17,6 +38,10 @@ export default function Home() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [selectedReservation, setSelectedReservation] =
+    useState<Reservation | null>(null);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
 
   // Carregar reservas da API
   const loadReservations = useCallback(async (showRefreshIndicator = false) => {
@@ -45,6 +70,17 @@ export default function Home() {
 
   useEffect(() => {
     loadReservations();
+
+    // Sincronizar quando voltar online
+    const handleOnlineSync = () => {
+      loadReservations(true);
+    };
+
+    window.addEventListener("online-sync", handleOnlineSync);
+
+    return () => {
+      window.removeEventListener("online-sync", handleOnlineSync);
+    };
   }, [loadReservations]);
 
   useEffect(() => {
@@ -56,23 +92,6 @@ export default function Home() {
   }, [loadReservations]);
 
   const handleSpotClick = (spotId: string) => {
-    const now = new Date();
-    const existingReservation = reservations.find(
-      (r) =>
-        r.spotId === spotId &&
-        new Date(r.startTime) <= now &&
-        new Date(r.endTime) > now,
-    );
-
-    if (existingReservation) {
-      toast.error(
-        `Vaga reservada por ${existingReservation.name} até ${new Date(
-          existingReservation.endTime,
-        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-      );
-      return;
-    }
-
     setSelectedSpotId(spotId);
     setDialogOpen(true);
   };
@@ -152,6 +171,105 @@ export default function Home() {
     }
   };
 
+  const handleExtendReservation = async (additionalHours: number) => {
+    if (!selectedReservation) return;
+
+    try {
+      const response = await fetch(
+        `/api/reservations?id=${selectedReservation.id}&action=extend`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ additionalHours }),
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error.error || "Erro ao prolongar reserva");
+        return;
+      }
+
+      const updatedReservation = await response.json();
+
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === updatedReservation.id
+            ? {
+                ...updatedReservation,
+                startTime: new Date(updatedReservation.startTime),
+                endTime: new Date(updatedReservation.endTime),
+              }
+            : r,
+        ),
+      );
+
+      toast.success(
+        `Reserva prolongada em ${additionalHours >= 1 ? `${additionalHours}h` : `${additionalHours * 60} min`}!`,
+      );
+      setExtendDialogOpen(false);
+      setSelectedReservation(null);
+    } catch (error) {
+      console.error("Erro ao prolongar reserva:", error);
+      toast.error("Erro ao prolongar reserva");
+    }
+  };
+
+  const handleCheckoutEarly = async () => {
+    if (!selectedReservation) return;
+
+    try {
+      const response = await fetch(
+        `/api/reservations?id=${selectedReservation.id}&action=checkout`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error.error || "Erro ao fazer checkout");
+        return;
+      }
+
+      const updatedReservation = await response.json();
+
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === updatedReservation.id
+            ? {
+                ...updatedReservation,
+                startTime: new Date(updatedReservation.startTime),
+                endTime: new Date(updatedReservation.endTime),
+              }
+            : r,
+        ),
+      );
+
+      toast.success("Vaga liberada com sucesso!");
+      setCheckoutDialogOpen(false);
+      setSelectedReservation(null);
+    } catch (error) {
+      console.error("Erro ao fazer checkout:", error);
+      toast.error("Erro ao fazer checkout");
+    }
+  };
+
+  const openExtendDialog = (reservation: Reservation) => {
+    setSelectedReservation(reservation);
+    setExtendDialogOpen(true);
+  };
+
+  const openCheckoutDialog = (reservation: Reservation) => {
+    setSelectedReservation(reservation);
+    setCheckoutDialogOpen(true);
+  };
+
   const activeReservations = reservations.filter(
     (r) => new Date(r.endTime) > new Date(),
   );
@@ -188,17 +306,20 @@ export default function Home() {
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => loadReservations(true)}
-              disabled={isRefreshing}
-              className="h-9"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-            </Button>
+            <div className="flex items-center gap-2">
+              <InstallButton />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadReservations(true)}
+                disabled={isRefreshing}
+                className="h-9"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-3 md:gap-4 text-xs md:text-sm md:hidden">
             <div className="flex items-center gap-1.5">
@@ -313,13 +434,41 @@ export default function Home() {
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Botões de Ação - Mobile Optimized */}
+                    {isActive && (
+                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openExtendDialog(reservation)}
+                          className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950 text-xs h-9 border-blue-300 font-semibold"
+                        >
+                          <ClockIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Prolongar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openCheckoutDialog(reservation)}
+                          className="w-full text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950 text-xs h-9 border-green-300 font-semibold"
+                        >
+                          <LogOut className="h-3.5 w-3.5 mr-1.5" />
+                          Já saí
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Botão Cancelar */}
+                    <div className="mt-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleCancelReservation(reservation.id)}
-                        className="flex-shrink-0 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-950 text-xs md:text-sm h-8 md:h-9 px-2 md:px-3"
+                        className="w-full text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-950 text-xs h-8"
                       >
-                        Cancelar
+                        Cancelar Reserva
                       </Button>
                     </div>
                   </Card>
@@ -335,9 +484,64 @@ export default function Home() {
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           spotNumber={selectedSpot.number}
+          spotId={selectedSpot.id}
+          existingReservations={reservations
+            .filter((r) => r.spotId === selectedSpot.id)
+            .map((r) => ({
+              startTime: r.startTime,
+              endTime: r.endTime,
+            }))}
           onConfirm={handleReservationConfirm}
         />
       )}
+
+      {/* Extend Reservation Dialog */}
+      {selectedReservation && (
+        <ExtendReservationDialog
+          open={extendDialogOpen}
+          onOpenChange={setExtendDialogOpen}
+          spotNumber={
+            defaultParkingLot.spots.find(
+              (s) => s.id === selectedReservation.spotId,
+            )?.number || 0
+          }
+          currentEndTime={new Date(selectedReservation.endTime)}
+          onConfirm={handleExtendReservation}
+        />
+      )}
+
+      {/* Checkout Early Dialog */}
+      <AlertDialog
+        open={checkoutDialogOpen}
+        onOpenChange={setCheckoutDialogOpen}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md mx-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <LogOut className="h-5 w-5 text-green-600" />
+              Confirmar Saída
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que já saiu da vaga? Isto irá liberar a vaga
+              imediatamente e terminar sua reserva.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto h-11">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCheckoutEarly}
+              className="w-full sm:w-auto h-11 bg-green-600 hover:bg-green-700"
+            >
+              Sim, já saí
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Offline Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

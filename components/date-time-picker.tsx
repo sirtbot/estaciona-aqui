@@ -51,7 +51,7 @@ export function DateTimePicker({
       newDate.setHours(hours, minutes, 0, 0);
       onChange(newDate);
     }
-  }, [selectedDate, time]);
+  }, [selectedDate, time, onChange]);
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {

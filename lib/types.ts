@@ -3,8 +3,8 @@ export interface Reservation {
   spotId: string;
   name: string;
   licensePlate: string;
-  startTime: Date;
-  endTime: Date;
+  startTime: string | Date;
+  endTime: string | Date;
 }
 
 export interface ParkingSpot {

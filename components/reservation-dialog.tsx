@@ -17,11 +17,22 @@ import { Switch } from "@/components/ui/switch";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  BUFFER_HOURS_BETWEEN_RESERVATIONS,
+  MAX_ADVANCE_DAYS,
+  AVAILABLE_DURATIONS,
+  DEFAULT_DURATION,
+} from "@/lib/reservation-config";
 
 interface ReservationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   spotNumber: number;
+  spotId: string;
+  existingReservations: Array<{
+    startTime: Date | string;
+    endTime: Date | string;
+  }>;
   onConfirm: (data: {
     name: string;
     licensePlate: string;
@@ -34,21 +45,52 @@ export function ReservationDialog({
   open,
   onOpenChange,
   spotNumber,
+  spotId,
+  existingReservations,
   onConfirm,
 }: ReservationDialogProps) {
   const [name, setName] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
-  const [reserveNow, setReserveNow] = useState(true);
-  const [startTime, setStartTime] = useState<Date>(new Date());
-  const [duration, setDuration] = useState("2");
+  const [duration, setDuration] = useState(DEFAULT_DURATION);
 
   const now = new Date();
-  const maxDate = addDays(now, 2);
+  const maxDate = addDays(now, MAX_ADVANCE_DAYS);
+
+  // Calcular o horário mínimo baseado nas reservas existentes
+  const getMinStartTime = () => {
+    const futureReservations = existingReservations
+      .map((r) => new Date(r.endTime))
+      .filter((endTime) => endTime > now)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (futureReservations.length > 0) {
+      // Adicionar margem de segurança após a última reserva
+      return addHours(
+        futureReservations[futureReservations.length - 1],
+        BUFFER_HOURS_BETWEEN_RESERVATIONS,
+      );
+    }
+
+    return now;
+  };
+
+  const minStartTime = getMinStartTime();
+  const hasActiveReservation = minStartTime > now;
+
+  const [reserveNow, setReserveNow] = useState(!hasActiveReservation);
+  const [startTime, setStartTime] = useState<Date>(
+    hasActiveReservation ? minStartTime : new Date(),
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const actualStartTime = reserveNow ? new Date() : startTime;
+    const actualStartTime =
+      reserveNow && !hasActiveReservation
+        ? new Date()
+        : startTime < minStartTime
+          ? minStartTime
+          : startTime;
     const endTime = addHours(actualStartTime, parseFloat(duration));
 
     onConfirm({
@@ -61,22 +103,10 @@ export function ReservationDialog({
     // Reset form
     setName("");
     setLicensePlate("");
-    setReserveNow(true);
-    setStartTime(new Date());
-    setDuration("2");
+    setReserveNow(!hasActiveReservation);
+    setStartTime(hasActiveReservation ? minStartTime : new Date());
+    setDuration(DEFAULT_DURATION);
   };
-
-  const durations = [
-    { value: "0.5", label: "30 min", popular: false },
-    { value: "1", label: "1h", popular: false },
-    { value: "2", label: "2h", popular: true },
-    { value: "3", label: "3h", popular: true },
-    { value: "4", label: "4h", popular: true },
-    { value: "6", label: "6h", popular: false },
-    { value: "8", label: "8h", popular: false },
-    { value: "12", label: "12h", popular: false },
-    { value: "24", label: "24h", popular: false },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,7 +119,24 @@ export function ReservationDialog({
             <span>Reservar Vaga</span>
           </DialogTitle>
           <DialogDescription className="text-sm">
-            Preencha seus dados para reservar (até 48h de antecedência)
+            {hasActiveReservation ? (
+              <div className="flex items-center gap-2 mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
+                <span className="text-orange-700 dark:text-orange-300">
+                  Vaga ocupada. Disponível a partir de{" "}
+                  <strong>
+                    {minStartTime.toLocaleString("pt-PT", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </strong>
+                </span>
+              </div>
+            ) : (
+              "Preencha seus dados para reservar (até 48h de antecedência)"
+            )}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -124,28 +171,30 @@ export function ReservationDialog({
               />
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
-              <Label htmlFor="reserve-now" className="cursor-pointer flex-1">
-                <div className="font-semibold text-blue-900 dark:text-blue-100">
-                  Reservar Agora
-                </div>
-                <div className="text-xs text-blue-700 dark:text-blue-300">
-                  Começar imediatamente
-                </div>
-              </Label>
-              <Switch
-                id="reserve-now"
-                checked={reserveNow}
-                onCheckedChange={setReserveNow}
-              />
-            </div>
+            {!hasActiveReservation && (
+              <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                <Label htmlFor="reserve-now" className="cursor-pointer flex-1">
+                  <div className="font-semibold text-blue-900 dark:text-blue-100">
+                    Reservar Agora
+                  </div>
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    Começar imediatamente
+                  </div>
+                </Label>
+                <Switch
+                  id="reserve-now"
+                  checked={reserveNow}
+                  onCheckedChange={setReserveNow}
+                />
+              </div>
+            )}
 
-            {!reserveNow && (
+            {(!reserveNow || hasActiveReservation) && (
               <DateTimePicker
                 label="Início da Reserva"
-                value={startTime}
+                value={startTime < minStartTime ? minStartTime : startTime}
                 onChange={setStartTime}
-                minDate={now}
+                minDate={minStartTime}
                 maxDate={maxDate}
               />
             )}
@@ -158,7 +207,7 @@ export function ReservationDialog({
 
               {/* Grid de botões para mobile */}
               <div className="grid grid-cols-3 gap-2">
-                {durations.map((d) => (
+                {AVAILABLE_DURATIONS.map((d) => (
                   <button
                     key={d.value}
                     type="button"
@@ -195,9 +244,12 @@ export function ReservationDialog({
                 <div className="flex items-center justify-between">
                   <span>Início:</span>
                   <span className="font-semibold">
-                    {reserveNow
+                    {reserveNow && !hasActiveReservation
                       ? "Agora"
-                      : startTime.toLocaleString("pt-PT", {
+                      : (startTime < minStartTime
+                          ? minStartTime
+                          : startTime
+                        ).toLocaleString("pt-PT", {
                           day: "2-digit",
                           month: "short",
                           hour: "2-digit",
@@ -209,7 +261,11 @@ export function ReservationDialog({
                   <span>Término:</span>
                   <span className="font-semibold">
                     {addHours(
-                      reserveNow ? new Date() : startTime,
+                      reserveNow && !hasActiveReservation
+                        ? new Date()
+                        : startTime < minStartTime
+                          ? minStartTime
+                          : startTime,
                       parseFloat(duration),
                     ).toLocaleString("pt-PT", {
                       day: "2-digit",
