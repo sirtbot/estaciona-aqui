@@ -28,7 +28,6 @@ interface ReservationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   spotNumber: number;
-  spotId: string;
   existingReservations: Array<{
     startTime: Date | string;
     endTime: Date | string;
@@ -45,7 +44,6 @@ export function ReservationDialog({
   open,
   onOpenChange,
   spotNumber,
-  spotId,
   existingReservations,
   onConfirm,
 }: ReservationDialogProps) {
