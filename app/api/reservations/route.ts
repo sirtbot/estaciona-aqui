@@ -1,44 +1,63 @@
 import { NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
-import { Reservation } from "@/lib/types";
-
-const RESERVATIONS_FILE = path.join(process.cwd(), "data", "reservations.json");
+import { supabase } from "@/lib/supabase";
+import { Reservation, ReservationDB } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-async function getReservations(): Promise<Reservation[]> {
-  try {
-    const data = await fs.readFile(RESERVATIONS_FILE, "utf-8");
-    return JSON.parse(data);
-  } catch {
-    // Se o arquivo não existe, retorna array vazio
-    return [];
-  }
+// Converter do formato DB (snake_case) para formato App (camelCase)
+function dbToReservation(db: ReservationDB): Reservation {
+  return {
+    id: db.id,
+    spotId: db.spot_id,
+    name: db.name,
+    licensePlate: db.license_plate,
+    startTime: db.start_time,
+    endTime: db.end_time,
+  };
 }
 
-async function saveReservations(reservations: Reservation[]): Promise<void> {
-  await fs.writeFile(RESERVATIONS_FILE, JSON.stringify(reservations, null, 2));
+// Converter do formato App (camelCase) para formato DB (snake_case)
+function reservationToDb(
+  reservation: Partial<Reservation>,
+): Partial<ReservationDB> {
+  return {
+    id: reservation.id,
+    spot_id: reservation.spotId,
+    name: reservation.name,
+    license_plate: reservation.licensePlate,
+    start_time:
+      typeof reservation.startTime === "string"
+        ? reservation.startTime
+        : reservation.startTime?.toISOString(),
+    end_time:
+      typeof reservation.endTime === "string"
+        ? reservation.endTime
+        : reservation.endTime?.toISOString(),
+  };
 }
 
-// GET - Obter todas as reservas
+// GET - Obter todas as reservas ativas
 export async function GET() {
   try {
-    const reservations = await getReservations();
+    // Buscar apenas reservas que ainda não expiraram
+    const { data, error } = await supabase
+      .from("reservations")
+      .select("*")
+      .gte("end_time", new Date().toISOString())
+      .order("start_time", { ascending: true });
 
-    // Remover reservas expiradas
-    const now = new Date();
-    const activeReservations = reservations.filter(
-      (r: Reservation) => new Date(r.endTime) > now,
-    );
-
-    // Se houve mudança, salvar
-    if (activeReservations.length !== reservations.length) {
-      await saveReservations(activeReservations);
+    if (error) {
+      console.error("Erro ao buscar reservas no Supabase:", error);
+      return NextResponse.json(
+        { error: "Erro ao obter reservas" },
+        { status: 500 },
+      );
     }
 
-    return NextResponse.json(activeReservations);
-  } catch {
+    const reservations = (data || []).map(dbToReservation);
+    return NextResponse.json(reservations);
+  } catch (error) {
+    console.error("Erro no GET /api/reservations:", error);
     return NextResponse.json(
       { error: "Erro ao obter reservas" },
       { status: 500 },
@@ -57,18 +76,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
     }
 
-    const reservations = await getReservations();
+    // Verificar conflito de horário para a mesma vaga
+    const { data: conflictingReservations, error: conflictError } =
+      await supabase
+        .from("reservations")
+        .select("*")
+        .eq("spot_id", spotId)
+        .gte("end_time", new Date().toISOString());
 
-    // Verificar conflito
-    const hasConflict = reservations.some(
-      (r: Reservation) =>
-        r.spotId === spotId &&
-        ((new Date(startTime) >= new Date(r.startTime) &&
-          new Date(startTime) < new Date(r.endTime)) ||
-          (new Date(endTime) > new Date(r.startTime) &&
-            new Date(endTime) <= new Date(r.endTime)) ||
-          (new Date(startTime) <= new Date(r.startTime) &&
-            new Date(endTime) >= new Date(r.endTime))),
+    if (conflictError) {
+      console.error("Erro ao verificar conflitos:", conflictError);
+      return NextResponse.json(
+        { error: "Erro ao verificar disponibilidade" },
+        { status: 500 },
+      );
+    }
+
+    // Verificar se há conflito de horário
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    const hasConflict = (conflictingReservations || []).some(
+      (r: ReservationDB) => {
+        const rStart = new Date(r.start_time);
+        const rEnd = new Date(r.end_time);
+
+        return (
+          (start >= rStart && start < rEnd) ||
+          (end > rStart && end <= rEnd) ||
+          (start <= rStart && end >= rEnd)
+        );
+      },
     );
 
     if (hasConflict) {
@@ -78,20 +116,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const newReservation: Reservation = {
+    // Criar nova reserva
+    const newReservationDb: ReservationDB = {
       id: `res-${Date.now()}`,
-      spotId,
+      spot_id: spotId,
       name,
-      licensePlate: licensePlate.toUpperCase(),
-      startTime,
-      endTime,
+      license_plate: licensePlate.toUpperCase(),
+      start_time: new Date(startTime).toISOString(),
+      end_time: new Date(endTime).toISOString(),
     };
 
-    reservations.push(newReservation);
-    await saveReservations(reservations);
+    const { data, error } = await supabase
+      .from("reservations")
+      .insert([newReservationDb])
+      .select()
+      .single();
 
-    return NextResponse.json(newReservation, { status: 201 });
-  } catch {
+    if (error) {
+      console.error("Erro ao criar reserva no Supabase:", error);
+      return NextResponse.json(
+        { error: "Erro ao criar reserva" },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json(dbToReservation(data), { status: 201 });
+  } catch (error) {
+    console.error("Erro no POST /api/reservations:", error);
     return NextResponse.json(
       { error: "Erro ao criar reserva" },
       { status: 500 },
@@ -112,20 +163,19 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const reservations = await getReservations();
-    const filtered = reservations.filter((r: Reservation) => r.id !== id);
+    const { error } = await supabase.from("reservations").delete().eq("id", id);
 
-    if (filtered.length === reservations.length) {
+    if (error) {
+      console.error("Erro ao deletar reserva no Supabase:", error);
       return NextResponse.json(
-        { error: "Reserva não encontrada" },
-        { status: 404 },
+        { error: "Erro ao cancelar reserva" },
+        { status: 500 },
       );
     }
 
-    await saveReservations(filtered);
-
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("Erro no DELETE /api/reservations:", error);
     return NextResponse.json(
       { error: "Erro ao cancelar reserva" },
       { status: 500 },
@@ -147,31 +197,36 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const reservations = await getReservations();
-    const reservationIndex = reservations.findIndex((r: Reservation) => r.id === id);
+    // Buscar reserva
+    const { data: reservation, error: fetchError } = await supabase
+      .from("reservations")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-    if (reservationIndex === -1) {
+    if (fetchError || !reservation) {
+      console.error("Erro ao buscar reserva:", fetchError);
       return NextResponse.json(
         { error: "Reserva não encontrada" },
         { status: 404 },
       );
     }
 
-    const reservation = reservations[reservationIndex];
+    const now = new Date();
+    const startTime = new Date(reservation.start_time);
+    const endTime = new Date(reservation.end_time);
 
     // Ação: Checkout antecipado (já saí)
     if (action === "checkout") {
-      const now = new Date();
-
       // Verificar se a reserva está ativa
-      if (new Date(reservation.startTime) > now) {
+      if (startTime > now) {
         return NextResponse.json(
           { error: "A reserva ainda não começou" },
           { status: 400 },
         );
       }
 
-      if (new Date(reservation.endTime) <= now) {
+      if (endTime <= now) {
         return NextResponse.json(
           { error: "A reserva já terminou" },
           { status: 400 },
@@ -179,11 +234,22 @@ export async function PATCH(request: Request) {
       }
 
       // Atualizar endTime para agora
-      reservation.endTime = now.toISOString();
-      reservations[reservationIndex] = reservation;
-      await saveReservations(reservations);
+      const { data, error } = await supabase
+        .from("reservations")
+        .update({ end_time: now.toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
 
-      return NextResponse.json(reservation);
+      if (error) {
+        console.error("Erro ao fazer checkout:", error);
+        return NextResponse.json(
+          { error: "Erro ao fazer checkout" },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json(dbToReservation(data));
     }
 
     // Ação: Prolongar reserva
@@ -198,17 +264,15 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const now = new Date();
-
       // Verificar se a reserva está ativa
-      if (new Date(reservation.startTime) > now) {
+      if (startTime > now) {
         return NextResponse.json(
           { error: "A reserva ainda não começou" },
           { status: 400 },
         );
       }
 
-      if (new Date(reservation.endTime) <= now) {
+      if (endTime <= now) {
         return NextResponse.json(
           { error: "A reserva já terminou" },
           { status: 400 },
@@ -216,21 +280,29 @@ export async function PATCH(request: Request) {
       }
 
       // Calcular novo endTime
-      const currentEndTime = new Date(reservation.endTime);
       const newEndTime = new Date(
-        currentEndTime.getTime() + additionalHours * 60 * 60 * 1000,
+        endTime.getTime() + additionalHours * 60 * 60 * 1000,
       );
 
       // Verificar conflito com outras reservas na mesma vaga
-      const hasConflict = reservations.some(
-        (r: Reservation) =>
-          r.id !== id &&
-          r.spotId === reservation.spotId &&
-          new Date(r.startTime) < newEndTime &&
-          new Date(r.endTime) > currentEndTime,
-      );
+      const { data: conflictingReservations, error: conflictError } =
+        await supabase
+          .from("reservations")
+          .select("*")
+          .eq("spot_id", reservation.spot_id)
+          .neq("id", id)
+          .gte("end_time", endTime.toISOString())
+          .lte("start_time", newEndTime.toISOString());
 
-      if (hasConflict) {
+      if (conflictError) {
+        console.error("Erro ao verificar conflitos:", conflictError);
+        return NextResponse.json(
+          { error: "Erro ao verificar disponibilidade" },
+          { status: 500 },
+        );
+      }
+
+      if (conflictingReservations && conflictingReservations.length > 0) {
         return NextResponse.json(
           { error: "Já existe outra reserva após este período" },
           { status: 409 },
@@ -238,15 +310,27 @@ export async function PATCH(request: Request) {
       }
 
       // Atualizar endTime
-      reservation.endTime = newEndTime.toISOString();
-      reservations[reservationIndex] = reservation;
-      await saveReservations(reservations);
+      const { data, error } = await supabase
+        .from("reservations")
+        .update({ end_time: newEndTime.toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
 
-      return NextResponse.json(reservation);
+      if (error) {
+        console.error("Erro ao prolongar reserva:", error);
+        return NextResponse.json(
+          { error: "Erro ao prolongar reserva" },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json(dbToReservation(data));
     }
 
     return NextResponse.json({ error: "Ação inválida" }, { status: 400 });
-  } catch {
+  } catch (error) {
+    console.error("Erro no PATCH /api/reservations:", error);
     return NextResponse.json(
       { error: "Erro ao atualizar reserva" },
       { status: 500 },

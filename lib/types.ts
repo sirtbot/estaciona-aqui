@@ -7,6 +7,17 @@ export interface Reservation {
   endTime: string | Date;
 }
 
+// Tipo para o banco de dados Supabase (snake_case)
+export interface ReservationDB {
+  id: string;
+  spot_id: string;
+  name: string;
+  license_plate: string;
+  start_time: string;
+  end_time: string;
+  created_at?: string;
+}
+
 export interface ParkingSpot {
   id: string;
   number: number;
